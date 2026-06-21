@@ -29,21 +29,21 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Do not run code between createServerClient and
+  // IMPORTANT: Do not run code between createServerClient and
   // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
+  //
+  // getClaims() reads the JWT from the cookie locally — no network request.
+  // This is safe to call in middleware on every request.
+  // Call once and reuse the result — avoids double JWT parsing on every request.
+  const { data: claimsData } = await supabase.auth.getClaims()
 
-  // IMPORTANT: If you remove getClaims() and you use server-side rendering
-  // with the Supabase client, your users may be randomly logged out.
-  const { data } = await supabase.auth.getClaims()
-  const user = data?.claims
+  // Only protect routes that require authentication.
+  // Public routes (/, /anime, /vn, /search) do NOT redirect.
+  const pathname = request.nextUrl.pathname
+  const isProtectedRoute = pathname.startsWith('/library')
 
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth')
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
+  if (isProtectedRoute && !claimsData?.claims) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)
